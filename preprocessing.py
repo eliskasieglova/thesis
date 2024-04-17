@@ -7,7 +7,10 @@ from matplotlib import pyplot as plt
 from sklearn import linear_model
 from shapely.ops import unary_union
 import pandas as pd
-
+import os
+from pathlib import Path
+from vars import label
+import xarray as xr
 
 def latlon2UTM(df):
     """
@@ -72,17 +75,28 @@ def dh(data):
     return data
 
 
-def filterATL06(datapath, outpath):
+def filterATL06(glacier_id):
 
-    data = gpd.read_file(datapath)
+    outpath = Path(f'data/temp/glaciers/{glacier_id}_filtered.gpkg')
+    outpath_csv = Path(f'data/temp/glaciers/{glacier_id}_filtered.csv')
+
+    if outpath.is_file():
+        return
+
+    data = gpd.read_file(f'data/temp/glaciers/{glacier_id}_icesat.gpkg')
+
+    from matplotlib import pyplot as plt
+    plt.scatter(data.h, data.dh)
+    plt.title(glacier_id)
+    plt.savefig(f'data/temp/figs/{glacier_id}_beforefiltering.png')
 
     # create new geometry (h, dh) so that i can make buffer etc.
     data = xy2geom(data, 'h', 'dh', 'computing_geom')
 
     # split the data into reference data and filter data
-    ref_data = data[data['product'] != 'atl06']
+    ref_data = data[data['product'] != 'ATL06']
     ref_data = gpd.GeoDataFrame(ref_data, geometry='computing_geom')
-    filter_data = data[data['product'] == 'atl06']
+    filter_data = data[data['product'] == 'ATL06']
     filter_data = gpd.GeoDataFrame(filter_data, geometry='computing_geom')
 
     # create buffer around the reference data
@@ -104,11 +118,18 @@ def filterATL06(datapath, outpath):
     # merge the datasets
     merge_result = pd.concat([ref_data, filtered_data])
 
+    from matplotlib import pyplot as plt
+    plt.scatter(merge_result.h, merge_result.dh)
+    plt.title(glacier_id)
+    plt.savefig(f'data/temp/figs/{glacier_id}_afterfiltering.png')
+    plt.close()
+
     # reset geometries
-    outdata = gpd.GeoDataFrame(merge_result, geometry='geometry', crs='EPGS:32633')
+    outdata = gpd.GeoDataFrame(merge_result, geometry='geometry', crs='EPSG:32633').drop(columns=['mask', 'computing_geom'])
 
     # save
     outdata.to_file(outpath)
+    outdata.to_csv(outpath_csv)
 
     return outdata
 
@@ -154,4 +175,49 @@ def filterATL06Ransac(inpath):
     # plt.ylabel("Response")
 
     return
+
+
+def mergeProducts(products):
+    """
+    Merges the input products into one and saved as .nc. Based on product names automatically
+    finds the saved files.
+
+    :param products: list of product names (f.ex.: ['ATL06', 'ATL08'])
+
+    :return: merged xarray dataset
+    """
+
+    # initialize empty dataframe
+    merged = pd.DataFrame()
+
+    dir = Path('data/data/')
+    for product in products:
+        data = pd.read_csv(dir / f'{product}.csv')
+        merged = pd.concat([merged, data])
+
+    merged.to_csv('data/data/ICESat.csv')
+
+    return merged
+
+def pointsToGeoDataFrame(data):
+    """
+    Converts DataFrame to GeoDataFrame. Is not reccommended to be used on huge datasets because it takes ages.
+
+    :param data: Input DataFrame.
+
+    :return: Saves GDF as file and returns GeoDataFrame of input DataFrame.
+    """
+
+    outpath = Path(f'data/data/ICESat_{label}.gpkg')
+
+    # cache
+    if outpath.is_file():
+        return gpd.read_file(outpath)
+
+    # convert DF to GDF and save
+    gdf = xy2geom(data, 'easting', 'northing', 'geometry')
+    gdf.to_file(outpath)
+
+    return gdf
+
 

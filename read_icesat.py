@@ -4,25 +4,52 @@ import os
 import pandas as pd
 from datetime import timedelta, datetime
 from pyproj import Proj
+import preprocessing
+import geopandas as gpd
+import xarray as xr
 
 
-def readICESat(icesat_product):
+def readICESat(icesat_products):
 
-    if icesat_product == 'ATL03':
-        readATL03()
-    elif icesat_product == 'ATL06':
-        readATL06()
-    elif icesat_product == 'ATL08':
-        readATL08()
-    elif icesat_product == 'ATL08QL':
-        readATL08QL()
-    else:
-        print('invalid product')
+    outpath = Path('data/data/ICESat.csv')
+
+    # cache
+    if outpath.is_file():
+        return pd.read_csv(outpath)
+
+    # read products
+    for icesat_product in icesat_products:
+        if Path(f'data/data/{icesat_product}.csv').exists():
+            continue
+
+        # read product
+        if icesat_product == 'ATL03':
+            readATL03()
+        elif icesat_product == 'ATL06':
+            readATL06()
+        elif icesat_product == 'ATL08':
+            readATL08()
+        elif icesat_product == 'ATL08QL':
+            readATL08QL()
+        else:
+            print('invalid product: ' + icesat_product)
+
+    # merge the files into one
+    merged = preprocessing.mergeProducts(icesat_products)
+    merged.to_csv(outpath)
+
+    return merged
 
 
 def readATL06():
-    path = Path('C:/Users/eliss/Documents/SvalbardSurges/is2_ATL06')
+    path = Path('data/downloads/ATL06')
+    outpath = Path(f'data/data/ATL06.csv')
 
+    # cache
+    if outpath.is_file():
+        return
+
+    # initialize empty dataframe
     data = pd.DataFrame()
 
     # list through directory with downloaded ATL06 data
@@ -64,10 +91,10 @@ def readATL06():
                 temp_beam["acquisition_time"] = timedeltas
 
                 # at the end of each beam append to temp file df
-                temp = temp.append(temp_beam)
+                temp = pd.concat([temp, temp_beam])
 
             # at the end of each file append to the data
-            data = data.append(temp)
+            data = pd.concat([data, temp])
 
     # convert latitude and longitude to UTM
     myproj = Proj("+proj=utm +zone=33 +north +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
@@ -76,24 +103,29 @@ def readATL06():
     data['northing'] = northing
 
     # assign product name
-    data['product'] = 'atl06'
+    data['product'] = 'ATL06'
+
+    # count dh
+    data = preprocessing.dh(data)
 
     # save data as csv
-    data.to_csv('data/atl06.csv')
-
-    # todo save as netcdf
-    #ds = xr.Dataset.from_dataframe(data)
-    #ds.to_netcdf('data/atl06.nc')
+    data.to_csv(outpath)
 
     return
 
 
 def readATL08():
-    path = Path('C:/Users/eliss/Documents/SvalbardSurges/is2_ATL08')
+    path = Path('data/downloads/ATL08')
+    outpath = Path(f'data/data/ATL08.csv')
 
+    # cache
+    if outpath.is_file():
+        return
+
+    # initialize empty dataframe
     data = pd.DataFrame()
 
-    # list through directory with downloaded ATL06 data
+    # list through directory with downloaded ATL08 data
     for filepath in os.listdir(path):
 
         # open file
@@ -131,10 +163,10 @@ def readATL08():
                 temp_beam["acquisition_time"] = timedeltas
 
                 # at the end of each beam append to temp file df
-                temp = temp.append(temp_beam)
+                temp = pd.concat([temp, temp_beam])
 
             # at the end of each file append to the data
-            data = data.append(temp)
+            data = pd.concat([data, temp])
 
     # convert latitude and longitude to UTM
     myproj = Proj("+proj=utm +zone=33 +north +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
@@ -143,20 +175,23 @@ def readATL08():
     data['northing'] = northing
 
     # assign product name
-    data['product'] = 'atl08'
+    data['product'] = 'ATL08'
+
+    # count dh
+    data = preprocessing.dh(data)
 
     # save data as csv
-    data.to_csv('data/atl08.csv')
-
-    # todo save as netcdf
-    #ds = xr.Dataset.from_dataframe(data)
-    #ds.to_netcdf('data/atl06.nc')
+    data.to_csv(outpath)
 
     return
 
 
 def readATL03():
-    path = Path('C:/Users/eliss/Documents/SvalbardSurges/is2_ATL03')
+    path = Path('data/downloads/ATL03')
+    outpath = Path('data/data/ATL03.csv')
+
+    if outpath.is_file():
+        return
 
     data = pd.DataFrame()
 
@@ -185,7 +220,6 @@ def readATL03():
                 temp_beam["delta_time"] = list(file[beam]['heights']['delta_time'])
                 temp_beam["quality"] = list(file[beam]['heights']['quality_ph'])
 
-
                 # save the beam and pair
                 temp_beam['beam'] = [beam] * len(temp_beam['h'])
 
@@ -200,10 +234,10 @@ def readATL03():
                 temp_beam["acquisition_time"] = timedeltas
 
                 # at the end of each beam append to temp file df
-                temp = temp.append(temp_beam)
+                temp = pd.concat([temp, temp_beam])
 
             # at the end of each file append to the data
-            data = data.append(temp)
+            data = pd.concat([data, temp])
 
     # convert latitude and longitude to UTM
     myproj = Proj("+proj=utm +zone=33 +north +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
@@ -212,24 +246,26 @@ def readATL03():
     data['northing'] = northing
 
     # assign product name
-    data['product'] = 'atl03'
+    data['product'] = 'ATL03'
 
     # save data as csv
-    data.to_csv('data/atl03.csv')
-
-    # todo save as netcdf
-    #ds = xr.Dataset.from_dataframe(data)
-    #ds.to_netcdf('data/atl06.nc')
+    data.to_csv(outpath)
 
     return
 
 
 def readATL08QL():
-    path = Path('C:/Users/eliss/Documents/SvalbardSurges/QLdata')
+    path = Path('data/downloads/ATL08QL')
+    outpath = Path(f'data/data/ATL08QL.csv')
 
+    # cache
+    if not outpath.is_file():
+        return
+
+    # initialize empty dataframe
     data = pd.DataFrame()
 
-    # list through directory with downloaded ATL06 data
+    # list through directory with downloaded ATL08QL data
     for filename in os.listdir(path):
 
         if filename.endswith('.xml'):
@@ -283,10 +319,10 @@ def readATL08QL():
                 temp_beam["acquisition_time"] = timedeltas
 
                 # at the end of each beam append to temp file df
-                temp = temp.append(temp_beam)
+                temp = pd.concat([temp, temp_beam])
 
             # at the end of each file append to the data
-            data = data.append(temp)
+            data = pd.concat([data, temp])
 
     # convert latitude and longitude to UTM
     myproj = Proj("+proj=utm +zone=33 +north +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
@@ -294,15 +330,13 @@ def readATL08QL():
     data['easting'] = easting
     data['northing'] = northing
 
-    # save data as csv
-    data.to_csv('data/atl08ql.csv')
-
     # assign product name
-    data['product'] = 'atl08ql'
+    data['product'] = 'ATL08QL'
 
-    # todo save as netcdf
-    # ds = xr.Dataset.from_dataframe(data)
-    # ds.to_netcdf('data/atl08ql.nc')
+    # count dh
+    data = preprocessing.dh(data)
+
+    # save data as csv
+    data.to_csv(outpath)
 
     return
-

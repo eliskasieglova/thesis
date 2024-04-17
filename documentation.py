@@ -124,3 +124,9 @@ filtered_ransac = preprocessing.filterATL06Ransac('data/temp/scheelebreen_dh.gpk
 analysis.selectGlaciers([18.5, 15.5, 78, 77.4])
 
 
+# times of opening datasets:
+#ATL08 csv: 1.5722465515136719, ATL08 gpkg: 114.23847365379333
+#ATL06 csv: 4.699980974197388, ATL06 gpkg: 447.89306473731995
+#.... using gpkg is really really bad for the big data, should only do it for counting dh
+
+
